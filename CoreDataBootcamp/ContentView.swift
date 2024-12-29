@@ -10,24 +10,25 @@ import CoreData
 
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
+    @State var text = ""
+    @FetchRequest(entity: Fruit.entity(), sortDescriptors: []) var fruits: FetchedResults<Fruit>
 
     var body: some View {
         NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
+            VStack(spacing: 20) {
+                TextField("Enter New Fruit", text: $text)
+                    .padding(.leading)
+                List {
+                    ForEach(fruits) { fruit in
+                        Text("\(fruit.name ?? "Unnamed") (\(fruit.isSweet ? "Sweet" : "Bitter"))")
+                            .onTapGesture {
+                                updateItem(fruit: fruit)
+                            }
                     }
+                    .onDelete(perform: deleteItems)
                 }
-                .onDelete(perform: deleteItems)
             }
+            .navigationTitle("Fruits")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     EditButton()
@@ -38,49 +39,58 @@ struct ContentView: View {
                     }
                 }
             }
-            Text("Select an item")
         }
     }
 
     private func addItem() {
         withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
+            let newFruit = Fruit(context: viewContext)
+            newFruit.name = text
+            newFruit.isSweet = Bool.random()
+            saveItems()
+            text.removeAll()
+        }
+    }
 
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+    private func saveItems() {
+        do {
+            try viewContext.save()
+        } catch {
+            let nsError = error as NSError
+            fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
         }
     }
 
     private func deleteItems(offsets: IndexSet) {
         withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+            guard let index = offsets.first else { return }
+            let fruit = fruits[index]
+            viewContext.delete(fruit)
+            saveItems()
         }
+    }
+    
+    private func updateItem(fruit: Fruit) {
+        let isSweet = fruit.isSweet
+        let currentName = fruit.name ?? ""
+        let newName = currentName + "!"
+        fruit.name = newName
+        fruit.isSweet = isSweet ? false : true
+        saveItems()
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
+// Preview section with mock data
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    let previewController = PersistenceController.preview
+    let context = previewController.container.viewContext
+
+    // Adding mock data for preview
+    let newFruit1 = Fruit(context: context)
+    newFruit1.name = "Apple"
+
+    let newFruit2 = Fruit(context: context)
+    newFruit2.name = "Banana"
+
+    return ContentView().environment(\.managedObjectContext, context)
 }
